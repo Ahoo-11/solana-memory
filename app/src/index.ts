@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import * as anchor from '@coral-xyz/anchor';
-import { Keypair, Connection, PublicKey, SystemProgram } from '@solana/web3.js';
+import { Keypair, Connection, PublicKey, SystemProgram, Transaction, TransactionInstruction } from '@solana/web3.js';
 
 // Program ID from Rust declare_id!
 const PROGRAM_ID = new PublicKey('BYBWXdJzR8tUhwnRLTzDSvCk7B8DY87wqm4Hdzwfn6bn');
@@ -47,14 +48,27 @@ export async function storeMemory(hashHex: string) {
     Buffer.from(hashBytes),
   ], PROGRAM_ID);
 
-  // Build instruction via Anchor IDL-free approach: manually construct instruction data using Anchor's discriminator
-  // Since we don't have the IDL yet, we can temporarily use Anchor's Instruction construction via coder
-  // Fallback: Use a simple SystemProgram createAccount with space and then serialize fields via Anchor Coder once IDL is available.
-  // For now, we'll invoke the program expecting it to create the account using the StoreMemory instruction.
+  // Build instruction data: discriminator + MemoryHash (32 bytes)
+  const storeDiscrim = crypto.createHash('sha256').update('global:store_memory').digest().slice(0, 8);
+  const data = Buffer.concat([storeDiscrim, Buffer.from(hashBytes)]);
 
-  // Using Anchor's coder requires the IDL; until build completes, we can't produce it. We'll log the derived PDA for manual testing.
-  console.log('Derived memory PDA:', memoryPda.toBase58());
-  console.log('Note: storeMemory will be fully wired after the IDL is generated via anchor build.');
+  const ix = new TransactionInstruction({
+    keys: [
+      { pubkey: provider.wallet.publicKey, isSigner: true, isWritable: true },
+      { pubkey: memoryPda, isSigner: false, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+    programId: PROGRAM_ID,
+    data,
+  });
+
+  const tx = new Transaction().add(ix);
+  tx.feePayer = provider.wallet.publicKey;
+  const { blockhash } = await provider.connection.getLatestBlockhash();
+  tx.recentBlockhash = blockhash;
+  const sig = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [provider.wallet.payer]);
+  console.log('StoreMemory tx:', sig);
+  return sig;
 }
 
 export async function getMemory(hashHex: string) {
@@ -94,11 +108,42 @@ export async function getMemory(hashHex: string) {
   };
 }
 
+export async function verifyMemory(hashHex: string) {
+  const provider = getProvider();
+  const hashBytes = hexTo32Bytes(hashHex);
+
+  const [memoryPda] = PublicKey.findProgramAddressSync([
+    Buffer.from(MEMORY_SEED),
+    Buffer.from(hashBytes),
+  ], PROGRAM_ID);
+
+  const verifyDiscrim = crypto.createHash('sha256').update('global:verify_memory').digest().slice(0, 8);
+  const data = Buffer.concat([verifyDiscrim, Buffer.from(hashBytes)]);
+
+  const ix = new TransactionInstruction({
+    keys: [
+      { pubkey: provider.wallet.publicKey, isSigner: true, isWritable: false },
+      { pubkey: memoryPda, isSigner: false, isWritable: false },
+    ],
+    programId: PROGRAM_ID,
+    data,
+  });
+
+  const tx = new Transaction().add(ix);
+  tx.feePayer = provider.wallet.publicKey;
+  const { blockhash } = await provider.connection.getLatestBlockhash();
+  tx.recentBlockhash = blockhash;
+  const sig = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [provider.wallet.payer]);
+  console.log('VerifyMemory tx:', sig);
+  return sig;
+}
+
 // Demo usage when running `npm run dev`
 async function main() {
   const exampleHash = '0x' + '11'.repeat(32); // replace with actual data or file hash
   await storeMemory(exampleHash);
   await getMemory(exampleHash);
+  await verifyMemory(exampleHash);
 }
 
 if (require.main === module) {

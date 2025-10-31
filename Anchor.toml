@@ -12,7 +12,7 @@ memorychain = "BYBWXdJzR8tUhwnRLTzDSvCk7B8DY87wqm4Hdzwfn6bn"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "localnet"
+cluster = "devnet"
 wallet = '~\.config\solana\id.json'
 
 [scripts]

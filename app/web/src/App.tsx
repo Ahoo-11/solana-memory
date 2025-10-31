@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import './App.css';
-import { connectWallet, deriveMemoryPda, getMemory, storeMemory, PROGRAM_ID } from './solana';
+import { deriveMemoryPda, getMemory, storeMemory, verifyMemory, rewardMiner, PROGRAM_ID } from './solana';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 
 type MemoryRow = {
   pda: string;
@@ -10,30 +12,37 @@ type MemoryRow = {
 };
 
 function App() {
+  const { publicKey, connected } = useWallet();
   const [wallet, setWallet] = useState<string | null>(null);
   const [hashHex, setHashHex] = useState<string>('0x' + '11'.repeat(32));
   const [status, setStatus] = useState<string>('');
   const [rows, setRows] = useState<MemoryRow[]>([]);
+  const [rewardAmount, setRewardAmount] = useState<number>(1000000); // 1 MEM (6 decimals)
 
   const memoryPda = useMemo(() => deriveMemoryPda(hashHex).toBase58(), [hashHex]);
 
-  async function handleConnect() {
-    try {
-      const pubkey = await connectWallet();
-      setWallet(pubkey.toBase58());
-      setStatus('Wallet connected');
-    } catch (e: any) {
-      setStatus('Connect error: ' + e.message);
-    }
+  // Reflect adapter connection state into local state for display
+  if (connected && publicKey && wallet !== publicKey.toBase58()) {
+    setWallet(publicKey.toBase58());
   }
 
   async function handleStore() {
     setStatus('Preparing store transaction...');
     try {
       const sig = await storeMemory(hashHex);
-      setStatus(`Submitted: ${sig}`);
+      setStatus(`Store submitted: ${sig}`);
     } catch (e: any) {
       setStatus('Store error: ' + e.message + ' (program must be built & deployed)');
+    }
+  }
+
+  async function handleVerify() {
+    setStatus('Preparing verify transaction...');
+    try {
+      const sig = await verifyMemory(hashHex);
+      setStatus(`Verify submitted: ${sig}`);
+    } catch (e: any) {
+      setStatus('Verify error: ' + e.message + ' (program must be built & deployed)');
     }
   }
 
@@ -52,12 +61,22 @@ function App() {
     }
   }
 
+  async function handleReward() {
+    setStatus('Preparing reward transaction...');
+    try {
+      const sig = await rewardMiner(rewardAmount);
+      setStatus(`Reward submitted: ${sig}`);
+    } catch (e: any) {
+      setStatus('Reward error: ' + e.message + ' (ensure vault funded & VITE_REWARD_MINT set)');
+    }
+  }
+
   return (
     <div className="container">
       <h1>Memorychain</h1>
       <p className="subtitle">Program ID: {PROGRAM_ID.toBase58()}</p>
       <div className="actions">
-        <button onClick={handleConnect}>{wallet ? 'Connected' : 'Connect Wallet'}</button>
+        <WalletMultiButton />
         <input
           value={hashHex}
           onChange={(e) => setHashHex(e.target.value)}
@@ -65,7 +84,16 @@ function App() {
           style={{ width: '520px' }}
         />
         <button onClick={handleStore}>Store Memory</button>
+        <button onClick={handleVerify}>Verify Memory</button>
         <button onClick={handleGet}>Get Memory</button>
+        <input
+          type="number"
+          value={rewardAmount}
+          onChange={(e) => setRewardAmount(parseInt(e.target.value || '0', 10))}
+          placeholder="Reward amount (base units)"
+          style={{ width: '220px' }}
+        />
+        <button onClick={handleReward}>Reward Miner</button>
       </div>
       <p className="status">{status}</p>
       <div className="pda">Derived PDA: {memoryPda}</div>
