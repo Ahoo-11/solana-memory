@@ -1,0 +1,38 @@
+#root {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.subtitle {
+  color: #888;
+  font-size: 0.9rem;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.status, .pda {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.9rem;
+}
+
+.mem-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.mem-table th, .mem-table td {
+  border: 1px solid #333;
+  padding: 6px 8px;
+  text-align: left;
+  font-size: 0.9rem;
+}
